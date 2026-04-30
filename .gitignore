@@ -1,0 +1,29 @@
+# Mac files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables / API keys
+.env
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Model checkpoints / large training files
+*.ckpt
+*.pt
+*.pth
+
+Outputs/
+
+IndexData/all_indices_converted.csv
+IndexData/all_indices_cleaned.csv

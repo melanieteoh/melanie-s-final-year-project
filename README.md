@@ -21,13 +21,16 @@ The aim of this project is to build a reproducible forecasting pipeline that com
 
 ## Data Note
 
-Large raw index files are not included in this repository because they exceed GitHub's file size limits. The repository includes the code required to process the data and run the forecasting pipeline. If required, the raw QMFin index data should be downloaded separately and placed inside the `IndexData/` folder before running the preprocessing scripts.
+The repository includes the processed index files and the final train, validation and test split files required to run the final experiments. The `IndexData/splits/` folder contains the prepared split files used by the forecasting scripts.
+
+The raw compressed files `RUSSELL1000.json.bz2` and `TOPIX1000.json.bz2` are also included if users want to rerun the full data conversion process. If these files are too large for submission or download, they can be removed and downloaded separately from the original QMFin data source.
 
 ## Project Root Path
 
 The scripts use a relative project root path so the project can be run on another local machine after downloading or cloning the repository.
 
 Each script sets the project root using:
+
 ```python
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -67,3 +70,4 @@ Codes/
 
 requirements.txt             # Python dependencies
 README.md                    # project instructions
+.gitignore

@@ -13,6 +13,7 @@ INDICES = [
 ]
 
 ABLATION_ORDER = ["top", "random", "bottom"]
+LABEL_MAP = {"top": "Top", "random": "Middle", "bottom": "Bottom"}
 
 def main():
     df = pd.read_csv(SHAP_DIR/ "ablation_results.csv")
@@ -28,7 +29,7 @@ def main():
             r = rec.iloc[0]
             rows.append([
                 unique_id.replace("_return", ""),
-                ablation_type.title(),
+                LABEL_MAP[ablation_type],
                 f"{r['removed_feature']} (rank {int(r['removed_rank'])})",
                 f"{r['mae_delta']:+.5f}",
                 f"{r['rmse_delta']:+.5f}",

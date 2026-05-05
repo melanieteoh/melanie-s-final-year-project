@@ -1,29 +1,19 @@
-# Mac files
+# Mac system files
 .DS_Store
+**/.DS_Store
 
 # Python cache
 __pycache__/
 *.pyc
 
-# Virtual environments
-venv/
+# virtual environments
 .venv/
+venv/
 
-# Environment variables / API keys
+# environment variables / API keys
 .env
 
-# Jupyter checkpoints
-.ipynb_checkpoints/
-
-# Logs
-*.log
-
-# Model checkpoints / large training files
-*.ckpt
-*.pt
-*.pth
-
-Outputs/
-
-IndexData/all_indices_converted.csv
+# large raw/combined data files
+IndexData/*.json.bz2
 IndexData/all_indices_cleaned.csv
+IndexData/all_indices_converted.csv

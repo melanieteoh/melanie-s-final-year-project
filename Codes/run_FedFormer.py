@@ -27,48 +27,13 @@ INDICES = [
 
 # model hyperparameters
 HORIZON = 1 # 1 to predict next day's return
-
-USE_EXOGENOUS = False
-
 INPUT_SIZE = 63 # roughly 3 months of trading days
-MAX_STEPS = 300
+MAX_STEPS = 300 # max gradient steps during training
 BATCH_SIZE = 16
 LEARNING_RATE = 1e-3
-VAL_CHECK_STEPS = 50
-EARLY_STOP_PATIENCE_STEPS = 5
+VAL_CHECK_STEPS = 50 # how often to check val loss for early stopping
+EARLY_STOP_PATIENCE_STEPS = 5  # stop after 5 bad val checks in a row
 RANDOM_SEED = 42
-
-# engineered feature columns
-FEATURE_COLS = [
-    "lag1",
-    "roll_mean_5", "roll_std_5",
-    "roll_mean_21", "roll_std_21",
-    "dow",
-]
-
-# build lag and rolling features from historical returns only
-# look-ahead leakage prevented by using .shift(1) 
-def add_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.sort_values("ds").copy()
-
-    # 1-day lag
-    df["lag1"] = df["y"].shift(1) # yesterday's return
-
-    # short-window rolling features 
-    # 5 trading days is 1 week
-    df["roll_mean_5"] = df["y"].shift(1).rolling(5).mean()
-    df["roll_std_5"] = df["y"].shift(1).rolling(5).std()
-
-    # long-window rolling features 
-    # 21 trading days is 1 month
-    df["roll_mean_21"] = df["y"].shift(1).rolling(21).mean()
-    df["roll_std_21"] = df["y"].shift(1).rolling(21).std()
-
-    # day-of-week feature
-    # 0 - Monday, 1 - Tuesday, 2 - Wednesday, 3 - Thursday, 4 - Friday
-    df["dow"] = df["ds"].dt.dayofweek
-
-    return df
 
 # load train, validation and test files 
 def load_split(unique_id: str):
@@ -82,123 +47,132 @@ def load_split(unique_id: str):
 
     return train, val, test
 
-# missing dates (market holidays) are filled with y = 0.0 instead of forward-filling previous return 
-def make_fedformer_ready(df, unique_id: str, use_exogenous: bool) -> pd.DataFrame:
-    # remove duplicates if any 
-    out = df.sort_values("ds").drop_duplicates(subset=["ds"]).copy()
-    # set business-day frequency as 8
-    out = out.set_index("ds").asfreq("B")
-    out["y"] = out["y"].fillna(0.0)  # closed market = 0.0 return, not repeated return
+# missing dates filled with y = 0.0 instead of forward-filling
+def make_fedformer_ready(hist_df: pd.DataFrame, unique_id: str) -> pd.DataFrame:
+    # remove duplicates if any
+    hist_df = hist_df.sort_values("ds").drop_duplicates(subset=["ds"]).copy()
 
-    if use_exogenous:
-        # forward-fill feature NaNs introduced by reindexing
-        out[FEATURE_COLS] = out[FEATURE_COLS].ffill()
-        out = out.reset_index()
-        out["unique_id"] = unique_id
-        out = out[["unique_id", "ds", "y"] + FEATURE_COLS]
-    else:
-        out = out.reset_index()
-        out["unique_id"] = unique_id
-        out = out[["unique_id", "ds", "y"]]
+    # set business-day frequency
+    hist_df = hist_df.set_index("ds").asfreq("B")
 
-    return out
+    # closed market = 0.0 return, not repeated return
+    hist_df["y"] = hist_df["y"].fillna(0.0)
 
-def build_fedformer_model(use_exogenous: bool) -> FEDformer:
+    hist_df = hist_df.reset_index()
+    hist_df["unique_id"] = unique_id
+
+    return hist_df[["unique_id", "ds", "y"]]
+
+# FEDformer model with the chosen hyperparameters
+def build_fedformer_model() -> FEDformer:
     return FEDformer(
         h=HORIZON,
         input_size=INPUT_SIZE,
-        hist_exog_list=FEATURE_COLS if use_exogenous else None,
-        loss=MAE(), 
+        loss=MAE(),
         learning_rate=LEARNING_RATE,
         max_steps=MAX_STEPS,
         batch_size=BATCH_SIZE,
         val_check_steps=VAL_CHECK_STEPS,
         early_stop_patience_steps=EARLY_STOP_PATIENCE_STEPS,
-        scaler_type="identity",
+        scaler_type="standard",
         random_seed=RANDOM_SEED,
         accelerator="cpu",
         devices=1,
     )
 
-# training FEDformer on train and val
-# generate rolling 1 step ahead predictions over test set 
-def run_fedformer_for_index(unique_id):
+# FEDformer rolling forecast function
+def run_fedformer_for_index(unique_id: str) -> pd.DataFrame:
     train, val, test = load_split(unique_id)
-    # combine train and val
-    # held out test
-    train_val = pd.concat([train, val], ignore_index=True).sort_values("ds")
 
-    # build on full series ONCE before splitting or looping to avoid recomputation
-    full = pd.concat([train_val, test], ignore_index=True).sort_values("ds").reset_index(drop=True)
-    full = add_features(full)
+    # initial history available before testing starts
+    history = pd.concat([train, val], ignore_index=True)
+    history = history.sort_values("ds").reset_index(drop=True)
 
-    # prepare train and val slice for model fitting
-    train_val_ready = make_fedformer_ready(
-        full[full["ds"] < test["ds"].min()], unique_id, USE_EXOGENOUS
-    ).dropna()
-    print(f"Train+val rows after prep: {len(train_val_ready)}")
+    test = test.sort_values("ds").reset_index(drop=True)
 
-    # fit the model 
-    model = build_fedformer_model(USE_EXOGENOUS)
+    # trained locally
+    # train once on train+val, then reuse the same trained model for every rolling step
+    train_ready = make_fedformer_ready(history, unique_id)
+
+    print(f"{unique_id}: training FEDformer on {len(train_ready)} rows...", flush=True)
+
+    model = build_fedformer_model()
     nf = NeuralForecast(models=[model], freq="B")
-    # val_size tells NeuralForecast how many rows to use  for internal early-stopping validation
-    nf.fit(df=train_val_ready, val_size=len(val), verbose=False)
+    # val_size is number of trailing rows reserved for internal early-stopping
+    nf.fit(df=train_ready, val_size=len(val), verbose=False)
+    print(f"{unique_id}: training complete.", flush=True)
 
-    # prepare full series 
-    # for history slicing in rolling loop
-    full_ready = make_fedformer_ready(full, unique_id, USE_EXOGENOUS).dropna()
-
-    # rolling prediction loop
     preds = []
     fail_count = 0
-    nan_count = 0
-    test_dates = sorted(test["ds"].tolist())
 
-    for forecast_date in test_dates:
-        # slice history strictly before forecast date 
-        # prevent leakage
-        history_ready = full_ready[full_ready["ds"] < forecast_date].copy()
+    for i in range(len(test)):
+        forecast_row = test.iloc[[i]].copy()
+        forecast_date = forecast_row["ds"].iloc[0]
+
+        print(
+            f"{unique_id}: forecasting {i + 1}/{len(test)} for {forecast_date.date()}...",
+            flush=True,
+        )
+
+        # build the history the model will see (everything up to t-1)
+        history_ready = make_fedformer_ready(history, unique_id)
 
         # FEDformer needs at least input_size rows to form a window
+        # this should never trigger on real splits but helps keep script safe
         if len(history_ready) < INPUT_SIZE:
+            print(f"  Not enough history ({len(history_ready)} < {INPUT_SIZE}), skipping")
             fail_count += 1
-            continue 
-
-        # only pass the last INPUT_SIZE rows
-        history_slice = history_ready.tail(INPUT_SIZE).copy()
+            # still reveal the actual test row to keep the rolling history aligned
+            history = pd.concat([history, forecast_row], ignore_index=True)
+            history = history.sort_values("ds").reset_index(drop=True)
+            continue
 
         try:
-            fcst = nf.predict(df=history_ready, verbose=False)
+            # NeuralForecast predicts h steps after last date in df
+            forecast = nf.predict(df=history_ready, verbose=False)
 
-            # NeuralForecast names prediction column after model class
-            pred_col = [c for c in fcst.columns if c not in ["unique_id", "ds"]][0]
+            # NeuralForecast names the prediction column after the model class
+            pred_col = [c for c in forecast.columns if c not in ["unique_id", "ds"]][0]
+            predicted_date = pd.Timestamp(forecast.iloc[0]["ds"])
+            pred_value = float(forecast.iloc[0][pred_col])
 
-            # verify date alignment
-            predicted_date = pd.Timestamp(fcst.iloc[0]["ds"])
+            # verify date alignment 
+            # model's predicted date should match  next test date because both run on business-day frequency
             if predicted_date != pd.Timestamp(forecast_date):
-                print(f"Date mismatch at {forecast_date}: model predicted for {predicted_date}")
+                print(
+                    f"Date mismatch: model predicted {predicted_date.date()} "
+                    f"but expected {forecast_date.date()}. Skipping."
+                )
                 fail_count += 1
+                history = pd.concat([history, forecast_row], ignore_index=True)
+                history = history.sort_values("ds").reset_index(drop=True)
                 continue
 
-            pred_value = float(fcst.iloc[0][pred_col])
-        
+            # catch NaN predictions
+            # happens if training under-converges
+            if np.isnan(pred_value):
+                print(f"  NaN prediction at {forecast_date.date()}")
+                fail_count += 1
+                history = pd.concat([history, forecast_row], ignore_index=True)
+                history = history.sort_values("ds").reset_index(drop=True)
+                continue
+
+            print(
+                f"{unique_id}: done {i + 1}/{len(test)} for {forecast_date.date()} "
+                f"(pred={pred_value:.6f})",
+                flush=True,
+            )
+
         except Exception as e:
             # log exact error so patterns of failure are visible
-            print(f"Warning: failed at {forecast_date}: {e}")
+            print(f"Warning: prediction failed at {forecast_date.date()}: {e}")
             fail_count += 1
+            history = pd.concat([history, forecast_row], ignore_index=True)
+            history = history.sort_values("ds").reset_index(drop=True)
             continue
 
-        # catch NaN predictions 
-        if np.isnan(pred_value):
-            nan_count += 1
-            if nan_count <= 5:
-                print(f"  NaN prediction at {forecast_date} — check model convergence")
-            fail_count += 1
-            continue
-
-        # look up true return and last observed return for baselines
-        actual_value = float(test[test["ds"] == forecast_date]["y"].iloc[0])
-        last_return = float(full[full["ds"] < forecast_date]["y"].iloc[-1])
+        actual_value = float(forecast_row["y"].iloc[0])
+        last_return_baseline = float(history["y"].iloc[-1])
 
         preds.append({
             "unique_id": unique_id,
@@ -206,12 +180,17 @@ def run_fedformer_for_index(unique_id):
             "y_true": actual_value,
             "y_pred_fedformer": pred_value,
             "y_pred_zero": 0.0, # ZeroBaseline always predicts 0
-            "y_pred_last": last_return, # LastReturn repeats yesterday
+            "y_pred_last": last_return_baseline # LastReturn repeats yesterday's return
         })
-    
-    print(f"  Results: {len(preds)} succeeded, {fail_count} failed "
-          f"({nan_count} were NaN) out of {len(test_dates)} test dates.")
 
+        # reveal the actual test row and append it to history (rolling step)
+        history = pd.concat([history, forecast_row], ignore_index=True)
+        history = history.sort_values("ds").reset_index(drop=True)
+
+    print(
+        f"Results: {len(preds)} succeeded, {fail_count} failed "
+        f"out of {len(test)} test dates."
+    )
     return pd.DataFrame(preds)
 
 def main():
@@ -222,18 +201,19 @@ def main():
 
         pred_df = run_fedformer_for_index(unique_id)
 
-        # skip computation if no predictions produced
         if pred_df.empty:
-            print(f"No predictions for {unique_id}.")
+            print(f"No predictions produced for {unique_id}")
             continue
 
+        # save per-index predictions
         pred_df.to_csv(OUTPUT_DIR / f"{unique_id}_predictions.csv", index=False)
         all_predictions.append(pred_df)
-        print(f"Saved predictions for {unique_id}.")
+        print(f"  Done with {unique_id}.")
 
     if all_predictions:
         pd.concat(all_predictions, ignore_index=True).to_csv(
-            OUTPUT_DIR / "fedformer_predictions.csv", index=False
+            OUTPUT_DIR / "fedformer_predictions.csv",
+            index=False,
         )
         print(f"\nCombined predictions saved to {OUTPUT_DIR / 'fedformer_predictions.csv'}")
     else:

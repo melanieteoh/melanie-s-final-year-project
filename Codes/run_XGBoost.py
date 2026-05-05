@@ -6,7 +6,7 @@ from xgboost import XGBRegressor
 
 logging.basicConfig(level=logging.ERROR)
 
-PROJECT_ROOT = Path("/Users/melanie/Desktop/final year project")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SPLITS_DIR = PROJECT_ROOT / "IndexData" / "splits"
 

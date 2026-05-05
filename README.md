@@ -55,3 +55,7 @@ Codes/
 
 requirements.txt             # Python dependencies
 README.md                    # project instructions
+
+## Data Note
+
+Large raw index files are not included in this repository because they exceed GitHub's file size limits. The repository includes the code required to process the data and run the forecasting pipeline. If required, the raw QMFin index data should be downloaded separately and placed inside the `IndexData/` folder before running the preprocessing scripts.

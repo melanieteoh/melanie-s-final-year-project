@@ -19,6 +19,21 @@ The aim of this project is to build a reproducible forecasting pipeline that com
 - directional stability analysis
 - SHAP-based explainability
 
+## Data Note
+
+The repository includes the processed index files and the final train, validation and test split files required to run the final experiments. The `IndexData/splits/` folder contains the prepared split files used by the forecasting scripts.
+
+The raw compressed files `RUSSELL1000.json.bz2` and `TOPIX1000.json.bz2` are also included if users want to rerun the full data conversion process. If these files are too large for submission or download, they can be removed and downloaded separately from the original QMFin data source.
+
+## Project Root Path
+
+The scripts use a relative project root path so the project can be run on another local machine after downloading or cloning the repository.
+
+Each script sets the project root using:
+
+```python
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 ## Project Structure
 
 ```text
@@ -46,7 +61,7 @@ Codes/
     dataClean.py             # cleans and aligns index return data
     prepareData.py           # creates lag, volatility and momentum features, then splits data
     run_TimeGPT.py           # runs TimeGPT rolling one-step-ahead forecasts
-    run_FEDformer.py         # trains and evaluates FEDformer
+    run_FEDFormer.py         # trains and evaluates FEDformer
     run_XGBoost.py           # trains XGBoost and saves predictions/models
     evaluate.py              # evaluates all model predictions on common dates
     significanceTest.py      # runs binomial and Wilcoxon significance tests
@@ -55,3 +70,4 @@ Codes/
 
 requirements.txt             # Python dependencies
 README.md                    # project instructions
+.gitignore

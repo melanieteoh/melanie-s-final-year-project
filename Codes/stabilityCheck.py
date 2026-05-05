@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-PROJECT_ROOT = Path("/Users/melanie/Desktop/final year project")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EVAL_DIR = PROJECT_ROOT / "Outputs" / "evaluation"
 
 INDICES = [

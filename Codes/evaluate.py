@@ -5,7 +5,7 @@ import matplotlib.ticker as mticker
 from pathlib import Path
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-PROJECT_ROOT = Path("/Users/melanie/Desktop/final year project")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / "Outputs"
 EVAL_DIR = OUTPUT_DIR / "evaluation"
 EVAL_DIR.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.ERROR)
 logging.getLogger("nixtla").setLevel(logging.ERROR)
 logging.getLogger("nixtla.nixtla_client").setLevel(logging.ERROR)
 
-PROJECT_ROOT = Path("/Users/melanie/Desktop/final year project")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SPLITS_DIR = PROJECT_ROOT / "IndexData" / "splits"
 

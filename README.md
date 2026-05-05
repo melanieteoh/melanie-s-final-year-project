@@ -23,6 +23,14 @@ The aim of this project is to build a reproducible forecasting pipeline that com
 
 Large raw index files are not included in this repository because they exceed GitHub's file size limits. The repository includes the code required to process the data and run the forecasting pipeline. If required, the raw QMFin index data should be downloaded separately and placed inside the `IndexData/` folder before running the preprocessing scripts.
 
+## Project Root Path
+
+The scripts use a relative project root path so the project can be run on another local machine after downloading or cloning the repository.
+
+Each script sets the project root using:
+```python
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 ## Project Structure
 
 ```text

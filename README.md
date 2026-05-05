@@ -50,7 +50,7 @@ Codes/
     dataClean.py             # cleans and aligns index return data
     prepareData.py           # creates lag, volatility and momentum features, then splits data
     run_TimeGPT.py           # runs TimeGPT rolling one-step-ahead forecasts
-    run_FEDformer.py         # trains and evaluates FEDformer
+    run_FEDFormer.py         # trains and evaluates FEDformer
     run_XGBoost.py           # trains XGBoost and saves predictions/models
     evaluate.py              # evaluates all model predictions on common dates
     significanceTest.py      # runs binomial and Wilcoxon significance tests
